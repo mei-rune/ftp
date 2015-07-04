@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/textproto"
 	"strconv"
@@ -39,10 +40,12 @@ type ServerConn struct {
 
 // Entry describes a file and is returned by List().
 type Entry struct {
-	Name string
-	Type EntryType
-	Size uint64
-	Time time.Time
+	Name       string
+	Type       EntryType
+	Size       uint64
+	Time       time.Time
+	PointTo    string
+	PointToDir bool
 }
 
 // Response represents a data-connection
@@ -67,6 +70,11 @@ func Dial(addr string) (*ServerConn, error) {
 // It is generally followed by a call to Login() as most FTP commands require
 // an authenticated user.
 func DialTimeout(addr string, timeout time.Duration) (*ServerConn, error) {
+	_, _, e := net.SplitHostPort(addr)
+	if nil != e && strings.Contains(e.Error(), "missing port in address") {
+		addr = addr + ":21"
+	}
+
 	tconn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
 		return nil, err
@@ -81,7 +89,6 @@ func DialTimeout(addr string, timeout time.Duration) (*ServerConn, error) {
 	}
 
 	conn := textproto.NewConn(tconn)
-
 	c := &ServerConn{
 		conn:     conn,
 		host:     host,
@@ -374,10 +381,17 @@ func (c *ServerConn) List(path string) (entries []*Entry, err error) {
 
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		entry, err := parseFunc(scanner.Text())
-		if err == nil {
-			entries = append(entries, entry)
+		line := scanner.Text()
+		if "" == strings.TrimSpace(line) {
+			continue
 		}
+
+		entry, err := parseFunc(line)
+		if err != nil {
+			log.Println("[warn] - ftp - list '"+path+"', failed to parse result line,", line)
+			continue
+		}
+		entries = append(entries, entry)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
@@ -426,6 +440,78 @@ func (c *ServerConn) FileSize(path string) (int64, error) {
 	}
 
 	return strconv.ParseInt(msg, 10, 64)
+}
+
+// Make a test to check if a path (usually a link) is a directory.
+func (c *ServerConn) IsDir(path string) (bool, error) {
+	curdir, err := c.CurrentDir()
+	if err != nil {
+		return false, err
+	}
+
+	err = c.ChangeDir(path)
+	if err != nil {
+		return false, nil
+	}
+
+	err = c.ChangeDir(curdir)
+	if err != nil {
+		return true, err
+	}
+
+	return true, nil
+}
+
+// Function for walking directory.
+type WalkFunc func(path string, entry *Entry) error
+
+// Walking a directory, and call walkfunc for each file or subdirectory.
+func (c *ServerConn) Walk(path string, followlink bool, walkfunc WalkFunc) error {
+	entries, err := c.List(path)
+	if err != nil {
+		return err
+	}
+
+	ok, err := c.IsDir(path)
+	if err != nil {
+		return err
+	}
+	if !ok && len(entries) > 0 {
+		return walkfunc(path, entries[0])
+	}
+
+	for _, e := range entries {
+		p := strings.Join([]string{path, e.Name}, "/")
+
+		if e.Type == EntryTypeLink {
+			ok, err := c.IsDir(p)
+			if err != nil {
+				return err
+			}
+			if ok {
+				e.PointToDir = true
+
+				if followlink {
+					err = c.Walk(p, followlink, walkfunc)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		} else if e.Type == EntryTypeFolder {
+			err = c.Walk(p, followlink, walkfunc)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = walkfunc(p, e)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Retr issues a RETR FTP command to fetch the specified file from the remote
@@ -542,6 +628,12 @@ func (c *ServerConn) MakeDir(path string) error {
 // the remote FTP server.
 func (c *ServerConn) RemoveDir(path string) error {
 	_, _, err := c.cmd(StatusRequestedFileActionOK, "RMD %s", path)
+	return err
+}
+
+// Set the FTP file transfer type (eg. A or I)
+func (c *ServerConn) Type(mode string) error {
+	_, _, err := c.cmd(StatusCommandOK, "TYPE %s", mode)
 	return err
 }
 

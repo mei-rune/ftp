@@ -5,7 +5,17 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
+
+var gbk_decoder transform.Transformer
+
+func init() {
+	gbk_decoder = simplifiedchinese.GB18030.NewDecoder()
+}
 
 var errUnsupportedListLine = errors.New("Unsupported LIST line")
 
@@ -67,7 +77,6 @@ func parseRFC3659ListLine(line string) (*Entry, error) {
 // parseLsListLine parses a directory line in a format based on the output of
 // the UNIX ls command.
 func parseLsListLine(line string) (*Entry, error) {
-
 	// Has the first field a length of 10 bytes?
 	if strings.IndexByte(line, ' ') != 10 {
 		return nil, errUnsupportedListLine
@@ -136,6 +145,13 @@ func parseLsListLine(line string) (*Entry, error) {
 		return nil, err
 	}
 
+	if e.Type == EntryTypeLink {
+		name := strings.SplitN(e.Name, "->", 2)
+		e.Name = strings.TrimSpace(name[0])
+		if len(name) > 1 {
+			e.PointTo = strings.TrimSpace(name[1])
+		}
+	}
 	return e, nil
 }
 
@@ -145,14 +161,17 @@ func parseDirListLine(line string) (*Entry, error) {
 	e := &Entry{}
 	var err error
 
+	line = strings.TrimLeftFunc(line, unicode.IsSpace)
 	// Try various time formats that DIR might use, and stop when one works.
 	for _, format := range dirTimeFormats {
-		if len(line) > len(format) {
-			e.Time, err = time.Parse(format, line[:len(format)])
-			if err == nil {
-				line = line[len(format):]
-				break
-			}
+		if len(line) < len(format) {
+			continue
+		}
+
+		e.Time, err = time.Parse(format, line[:len(format)])
+		if err == nil {
+			line = line[len(format):]
+			break
 		}
 	}
 	if err != nil {
@@ -160,7 +179,7 @@ func parseDirListLine(line string) (*Entry, error) {
 		return nil, errUnsupportedListLine
 	}
 
-	line = strings.TrimLeft(line, " ")
+	line = strings.TrimLeftFunc(line, unicode.IsSpace)
 	if strings.HasPrefix(line, "<DIR>") {
 		e.Type = EntryTypeFolder
 		line = strings.TrimPrefix(line, "<DIR>")
@@ -177,7 +196,10 @@ func parseDirListLine(line string) (*Entry, error) {
 		line = line[space:]
 	}
 
-	e.Name = strings.TrimLeft(line, " ")
+	e.Name = strings.TrimSpace(line)
+	if rb, _, err := transform.Bytes(gbk_decoder, []byte(e.Name)); nil == err {
+		e.Name = string(rb)
+	}
 	return e, nil
 }
 

@@ -12,6 +12,10 @@ import (
 const (
 	testData = "Just some text"
 	testDir  = "mydir"
+
+	host     = "192.168.1.141"
+	user     = "administrator"
+	password = "tpt_8498b2c7"
 )
 
 func TestConnPASV(t *testing.T) {
@@ -27,7 +31,7 @@ func testConn(t *testing.T, disableEPSV bool) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	c, err := DialTimeout("localhost:21", 5*time.Second)
+	c, err := DialTimeout(host+":21", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +41,7 @@ func testConn(t *testing.T, disableEPSV bool) {
 		c.DisableEPSV = true
 	}
 
-	err = c.Login("anonymous", "anonymous")
+	err = c.Login(user, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +179,14 @@ func testConn(t *testing.T, disableEPSV bool) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(entries) != 1 || entries[0] != "/incoming" {
+	found := false
+	for _, entry := range entries {
+		if entry == "/incoming" {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Errorf("Unexpected entries: %v", entries)
 	}
 
@@ -213,7 +224,7 @@ func TestConnIPv6(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = c.Login("anonymous", "anonymous")
+	err = c.Login(user, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +243,7 @@ func TestConnect(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	c, err := Connect("localhost:21")
+	c, err := Connect(host + ":21")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +268,7 @@ func TestWrongLogin(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	c, err := DialTimeout("localhost:21", 5*time.Second)
+	c, err := DialTimeout(host+":21", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,12 +284,12 @@ func TestDeleteDirRecur(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
-	c, err := DialTimeout("localhost:21", 5*time.Second)
+	c, err := DialTimeout(host+":21", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = c.Login("anonymous", "anonymous")
+	err = c.Login(user, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,12 +366,12 @@ func TestFileDeleteDirRecur(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	c, err := DialTimeout("localhost:21", 5*time.Second)
+	c, err := DialTimeout(host+":21", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = c.Login("anonymous", "anonymous")
+	err = c.Login(user, password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,12 +425,12 @@ func TestMissingFolderDeleteDirRecur(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	c, err := DialTimeout("localhost:21", 5*time.Second)
+	c, err := DialTimeout(host+":21", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = c.Login("anonymous", "anonymous")
+	err = c.Login(user, password)
 	if err != nil {
 		t.Fatal(err)
 	}
