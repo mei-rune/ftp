@@ -90,10 +90,11 @@ func DialTimeout(addr string, timeout time.Duration) (*ServerConn, error) {
 
 	conn := textproto.NewConn(tconn)
 	c := &ServerConn{
-		conn:     conn,
-		host:     host,
-		timeout:  timeout,
-		features: make(map[string]string),
+		DisableEPSV: true,
+		conn:        conn,
+		host:        host,
+		timeout:     timeout,
+		features:    make(map[string]string),
 	}
 
 	_, _, err = c.conn.ReadResponse(StatusReady)
