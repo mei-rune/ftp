@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"net/textproto"
@@ -46,6 +47,34 @@ type Entry struct {
 	Time       time.Time
 	PointTo    string
 	PointToDir bool
+}
+
+func (entry *Entry) ToFileInfo() fs.FileInfo {
+	return FileInfo{entry: entry}
+}
+
+// A FileInfo describes a file and is returned by Stat.
+type FileInfo struct {
+	entry *Entry
+}
+
+func (fi FileInfo)	Name() string {
+	return fi.entry.Name
+}
+func (fi FileInfo)	Size() int64    {
+		return int64(fi.entry.Size)
+	}
+func (fi FileInfo)	Mode() fs.FileMode  {
+		return 0
+	}
+func (fi FileInfo)	ModTime() time.Time {
+	return fi.entry.Time
+}
+func (fi FileInfo) IsDir() bool {
+	return fi.entry.Type == EntryTypeFolder
+}
+func (fi FileInfo) Sys() interface{} {
+	return nil
 }
 
 // Response represents a data-connection
