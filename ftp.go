@@ -58,16 +58,16 @@ type FileInfo struct {
 	entry *Entry
 }
 
-func (fi FileInfo)	Name() string {
+func (fi FileInfo) Name() string {
 	return fi.entry.Name
 }
-func (fi FileInfo)	Size() int64    {
-		return int64(fi.entry.Size)
-	}
-func (fi FileInfo)	Mode() fs.FileMode  {
-		return 0
-	}
-func (fi FileInfo)	ModTime() time.Time {
+func (fi FileInfo) Size() int64 {
+	return int64(fi.entry.Size)
+}
+func (fi FileInfo) Mode() fs.FileMode {
+	return 0
+}
+func (fi FileInfo) ModTime() time.Time {
 	return fi.entry.Time
 }
 func (fi FileInfo) IsDir() bool {
@@ -592,6 +592,39 @@ func (c *ServerConn) StorFrom(path string, r io.Reader, offset uint64) error {
 
 	_, _, err = c.conn.ReadResponse(StatusClosingDataConnection)
 	return err
+}
+
+type fileWriter struct {
+	c        *ServerConn
+	conn     net.Conn
+	isClosed bool
+}
+
+func (fw *fileWriter) Close() error {
+	if fw.isClosed {
+		return nil
+	}
+	fw.isClosed = true
+
+	fw.conn.Close()
+
+	_, _, err := fw.c.conn.ReadResponse(StatusClosingDataConnection)
+	return err
+}
+
+func (fw *fileWriter) Write(data []byte) (int, error) {
+	return fw.conn.Write(data)
+}
+
+func (c *ServerConn) WriteFrom(path string, offset uint64) (io.WriteCloser, error) {
+	conn, err := c.cmdDataConnFrom(offset, "STOR %s", path)
+	if err != nil {
+		return nil, err
+	}
+	return &fileWriter{
+		c:    c,
+		conn: conn,
+	}, nil
 }
 
 // Rename renames a file on the remote FTP server.
